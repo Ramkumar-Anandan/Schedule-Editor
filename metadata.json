@@ -1,0 +1,5 @@
+{
+  "name": "Schedule Editor",
+  "description": "A sophisticated timetable management application featuring drag-and-drop session blocks, Excel import/export compatibility, and AI-assisted schedule optimization.",
+  "requestFramePermissions": []
+}
