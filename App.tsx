@@ -63,7 +63,6 @@ export default function App() {
   // Determine squads present in data
   const squads = useMemo(() => {
     const baseSquads = [1, 2, 3, 4, 5, 6];
-    // Fix: Explicitly type n as number to resolve 'unknown' error in filter and sort.
     const foundSquadIDs = Array.from(new Set(sessions.map(s => Number(s.squad_number))))
       .filter((n): n is number => typeof n === 'number' && !isNaN(n));
     return Array.from(new Set([...baseSquads, ...foundSquadIDs])).sort((a: number, b: number) => a - b);
@@ -127,12 +126,14 @@ export default function App() {
     const source = e.dataTransfer.getData('source');
 
     // Update session data to inherit the slot's specific railway time and date
+    // Also mark as modified if it moved positions
     const updatedSession: Session = { 
       ...draggedSession, 
       squad_number: String(selectedSquad), 
       date: targetDate,
       from: targetSlot.from,
-      to: targetSlot.to
+      to: targetSlot.to,
+      isModified: true
     };
 
     if (source === 'parking') {
@@ -149,8 +150,9 @@ export default function App() {
     const source = e.dataTransfer.getData('source');
 
     if (source === 'timetable') {
+      const updatedSession: Session = { ...draggedSession, isModified: true };
       setSessions(prev => prev.filter(s => s.id !== draggedSession.id));
-      setParkingLot(prev => [...prev, draggedSession]);
+      setParkingLot(prev => [...prev, updatedSession]);
     }
   };
 
@@ -166,9 +168,6 @@ export default function App() {
     };
   };
 
-  /**
-   * Formats a range in Railway Time (HHmm - HHmm).
-   */
   const formatRailwayRange = (from: string, to: string) => {
     return `${from} - ${to}`;
   };
@@ -254,14 +253,11 @@ export default function App() {
                 className="min-w-max relative" 
                 key={`${dynamicTimeSlots.length}-${visibleDates.length}-${selectedSquad}`}
               >
-                {/* Grid Header Row */}
                 <div className="grid sticky top-0 z-[55] bg-slate-50 border-b border-slate-100" 
                      style={{ gridTemplateColumns: `180px repeat(${dynamicTimeSlots.length}, 300px)` }}>
-                  
                   <div className="p-6 font-black text-slate-400 text-[10px] uppercase tracking-[0.25em] text-center border-r border-slate-100 sticky left-0 top-0 bg-slate-100 z-[56] flex flex-col items-center justify-center">
                     Date
                   </div>
-                  
                   {dynamicTimeSlots.map((slot, idx) => (
                     <div key={idx} className="p-6 font-black text-slate-600 text-[10px] uppercase tracking-[0.15em] text-center border-r border-slate-100 last:border-r-0 flex flex-col items-center justify-center gap-2 bg-slate-50">
                       <div className="flex items-center gap-2">
@@ -272,18 +268,15 @@ export default function App() {
                   ))}
                 </div>
 
-                {/* Grid Rows */}
                 {visibleDates.map(dateStr => {
                   const label = formatDateLabel(dateStr);
                   return (
                     <div key={dateStr} className="grid border-b border-slate-100 last:border-b-0 min-h-[180px] group/row"
                          style={{ gridTemplateColumns: `180px repeat(${dynamicTimeSlots.length}, 300px)` }}>
-                      
                       <div className="flex flex-col items-center justify-center border-r border-slate-100 bg-white group-hover/row:bg-slate-50 transition-all sticky left-0 z-50 shadow-[2px_0_5px_rgba(0,0,0,0.03)] px-4">
                         <span className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-1">{label.day}</span>
                         <span className="text-2xl font-black text-slate-800">{label.date}</span>
                       </div>
-
                       {dynamicTimeSlots.map((slot, sIdx) => {
                         const session = currentSquadSessions.find(s => 
                           s.date === dateStr && s.from === slot.from
@@ -307,22 +300,48 @@ export default function App() {
                               <div 
                                 draggable 
                                 onDragStart={(e) => onDragStart(e, session, 'timetable')}
-                                className="h-full w-full bg-gradient-to-br from-red-50 to-white border-l-[6px] border-[#ff0010] p-6 rounded-[1.5rem] shadow-lg cursor-grab active:cursor-grabbing hover:shadow-2xl hover:scale-[1.02] transition-all flex flex-col justify-between group/card ring-1 ring-red-100/50"
+                                className={`h-full w-full bg-gradient-to-br border-l-[6px] p-6 rounded-[1.5rem] shadow-lg cursor-grab active:cursor-grabbing hover:shadow-2xl hover:scale-[1.02] transition-all flex flex-col justify-between group/card ring-1 ${
+                                  session.isModified 
+                                    ? 'from-teal-50 to-white border-[#0D9488] ring-teal-100/50' 
+                                    : 'from-red-50 to-white border-[#ff0010] ring-red-100/50'
+                                }`}
                               >
                                 <div>
                                   <div className="flex items-start justify-between gap-3 mb-2">
-                                    <h4 className="font-black text-red-950 text-sm leading-tight line-clamp-2 uppercase tracking-tight">{session.course_id}</h4>
-                                    <GripVertical size={16} className="text-red-200 shrink-0 group-hover/card:text-red-400" />
+                                    <h4 className={`font-black text-sm leading-tight line-clamp-2 uppercase tracking-tight ${
+                                      session.isModified ? 'text-teal-950' : 'text-red-950'
+                                    }`}>
+                                      {session.course_id}
+                                    </h4>
+                                    <GripVertical size={16} className={`shrink-0 transition-colors ${
+                                      session.isModified ? 'text-teal-200 group-hover/card:text-teal-400' : 'text-red-200 group-hover/card:text-red-400'
+                                    }`} />
                                   </div>
                                   {session.lu_id && (
-                                    <div className="inline-block bg-red-600/10 px-2.5 py-1 rounded-lg">
-                                      <p className="text-[10px] text-[#ff0010] font-black uppercase tracking-widest">{session.lu_id}</p>
+                                    <div className={`inline-block px-2.5 py-1 rounded-lg ${
+                                      session.isModified ? 'bg-teal-600/10' : 'bg-red-600/10'
+                                    }`}>
+                                      <p className={`text-[10px] font-black uppercase tracking-widest ${
+                                        session.isModified ? 'text-teal-700' : 'text-[#ff0010]'
+                                      }`}>
+                                        {session.lu_id}
+                                      </p>
                                     </div>
                                   )}
                                 </div>
-                                <div className="mt-4 pt-4 border-t border-red-100 flex items-center justify-between">
-                                   <p className="text-[11px] text-red-900 font-black truncate max-w-[120px]">{session.mentor_id}</p>
-                                   <span className="text-[9px] font-black text-red-400">{session.from}</span>
+                                <div className={`mt-4 pt-4 border-t flex items-center justify-between ${
+                                  session.isModified ? 'border-teal-100' : 'border-red-100'
+                                }`}>
+                                   <p className={`text-[11px] font-black truncate max-w-[120px] ${
+                                     session.isModified ? 'text-teal-900' : 'text-red-900'
+                                   }`}>
+                                     {session.mentor_id}
+                                   </p>
+                                   <span className={`text-[9px] font-black ${
+                                     session.isModified ? 'text-teal-400' : 'text-red-400'
+                                   }`}>
+                                     {session.from}
+                                   </span>
                                 </div>
                               </div>
                             )}
@@ -354,7 +373,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Sidebar / Staging */}
         <aside 
           className="w-[320px] bg-white border-l border-slate-200 flex flex-col shadow-[-30px_0_60px_rgba(0,0,0,0.03)] z-[80] shrink-0 overflow-hidden"
           onDragOver={(e) => e.preventDefault()}
@@ -382,9 +400,13 @@ export default function App() {
                   key={session.id}
                   draggable 
                   onDragStart={(e) => onDragStart(e, session, 'parking')}
-                  className="bg-white border border-slate-200 p-6 rounded-[2.5rem] shadow-sm cursor-grab active:cursor-grabbing hover:border-[#ff0010] hover:shadow-2xl transition-all group relative overflow-hidden ring-1 ring-slate-100 shrink-0"
+                  className={`bg-white border p-6 rounded-[2.5rem] shadow-sm cursor-grab active:cursor-grabbing transition-all group relative overflow-hidden ring-1 shrink-0 ${
+                    session.isModified 
+                      ? 'border-[#0D9488] ring-teal-50 hover:shadow-teal-200 hover:shadow-2xl' 
+                      : 'border-slate-200 ring-slate-100 hover:border-[#ff0010] hover:shadow-red-100 hover:shadow-2xl'
+                  }`}
                 >
-                  <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100">
+                  <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 z-10">
                      <button 
                       type="button"
                       onClick={() => setParkingLot(prev => prev.filter(s => s.id !== session.id))}
@@ -393,13 +415,22 @@ export default function App() {
                       <Trash2 size={16} />
                     </button>
                   </div>
-                  <h4 className="font-black text-slate-800 text-sm mb-2 uppercase tracking-tight">{session.course_id}</h4>
+                  {session.isModified && (
+                    <div className="absolute top-6 left-0 px-3 py-1 bg-teal-600 text-white text-[8px] font-black uppercase tracking-widest rounded-r-lg shadow-lg">
+                      Modified
+                    </div>
+                  )}
+                  <h4 className="font-black text-slate-800 text-sm mb-2 uppercase tracking-tight mt-4">{session.course_id}</h4>
                   {session.lu_id && (
                     <p className="text-[11px] text-slate-400 font-black uppercase mb-6">{session.lu_id}</p>
                   )}
                   <div className="flex items-center justify-between pt-6 border-t border-slate-50 text-[11px] font-black">
                     <span className="text-slate-500">{session.date}</span>
-                    <span className="text-[#ff0010] bg-red-50 px-3 py-1 rounded-lg">{session.from}</span>
+                    <span className={`px-3 py-1 rounded-lg ${
+                      session.isModified ? 'text-teal-600 bg-teal-50' : 'text-[#ff0010] bg-red-50'
+                    }`}>
+                      {session.from}
+                    </span>
                   </div>
                 </div>
               ))

@@ -8,6 +8,7 @@ export interface Session {
   course_id: string;
   lu_id: string;
   mentor_id: string;
+  isModified?: boolean; // New flag to track manual changes
 }
 
 export interface TimetableSlot {
